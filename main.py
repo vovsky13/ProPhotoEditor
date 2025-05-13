@@ -3,7 +3,7 @@ from PIL import Image
 from config import Config
 from utils import create_grid
 from processing import process_image
-from presets import save_preset, load_preset
+from presets import save_preset, load_preset  # Убедись, что файл presets.py существует и содержит нужные функции
 
 Config.ensure_directories()
 
@@ -17,7 +17,7 @@ def main():
         st.header("Настройки")
         template_choice = st.selectbox("Шаблон документа", list(Config.TEMPLATES_MM.keys()))
         dpi_choice = st.selectbox("Качество (DPI)", Config.DPI_VALUES, index=2)
-        model_choice = st.selectbox("AI Модель", list(Config.AI_MODELS.keys()))
+        model_choice = st.selectbox("AI Модель", Config.AI_MODELS)
 
         brightness = st.slider("Яркость", 0.5, 2.0, 1.0, 0.1)
         contrast = st.slider("Контраст", 0.5, 2.0, 1.0, 0.1)
@@ -38,23 +38,30 @@ def main():
             save_preset(preset_name, settings)
             st.success(f"Пресет '{preset_name}' сохранён!")
 
-    for uploaded_file in uploaded_files:
-        with st.expander(f"Обработка: {uploaded_file.name}", expanded=True):
-            original_image = Image.open(uploaded_file)
-            st.image(original_image, caption="Исходное изображение", use_column_width=True)
+    if uploaded_files:
+        for uploaded_file in uploaded_files:
+            with st.expander(f"Обработка: {uploaded_file.name}", expanded=True):
+                original_image = Image.open(uploaded_file)
+                st.image(original_image, caption="Исходное изображение", use_column_width=True)
 
-            if st.checkbox("Показать сетку"):
-                grid_color = st.color_picker("Цвет сетки", "#FF0000")
-                grid_image = create_grid(original_image.copy(), grid_color)
-                st.image(grid_image, caption="Сетка", use_column_width=True)
+                if st.checkbox(f"Показать сетку для {uploaded_file.name}"):
+                    grid_color = st.color_picker("Цвет сетки", "#FF0000")
+                    grid_image = create_grid(original_image.copy(), grid_color)
+                    st.image(grid_image, caption="Сетка", use_column_width=True)
 
-            if st.button(f"🚀 Обработать {uploaded_file.name}"):
-                template_mm = Config.TEMPLATES_MM[template_choice]
-                processed_img = process_image(
-                    original_image, template_mm, dpi_choice, model_choice,
-                    brightness, contrast, saturation, gamma
-                )
-                st.image(processed_img, caption="Результат", use_column_width=True)
+                if st.button(f"🚀 Обработать {uploaded_file.name}"):
+                    template_mm = Config.TEMPLATES_MM[template_choice]
+                    processed_img = process_image(
+                        original_image,
+                        template_mm,
+                        dpi_choice,
+                        model_choice,
+                        brightness,
+                        contrast,
+                        saturation,
+                        gamma
+                    )
+                    st.image(processed_img, caption="Результат", use_column_width=True)
 
 if __name__ == "__main__":
     main()
