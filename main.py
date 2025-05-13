@@ -50,8 +50,11 @@ def main():
 
             if st.button(f"🚀 Обработать {uploaded_file.name}"):
                 template_mm = Config.TEMPLATES_MM[template_choice]
-                processed_img = process_image(original_image, template_mm, dpi_choice, model_choice, brightness, contrast, saturation, gamma)
+                processed_img = process_image(
+                    original_image, template_mm, dpi_choice, model_choice,
+                    brightness, contrast, saturation, gamma
+                )
                 st.image(processed_img, caption="Результат", use_column_width=True)
 
-if name == "__main__":
+if __name__ == "__main__":
     main()
