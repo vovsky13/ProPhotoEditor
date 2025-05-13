@@ -2,3 +2,4 @@ streamlit
 Pillow
 rembg
 opencv-python-headless
+mediapipe
