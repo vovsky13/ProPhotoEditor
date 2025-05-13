@@ -1,23 +1,16 @@
 import cv2
-import numpy as np
-import dlib
-from deepface import DeepFace
-from rembg import remove, new_session
+import mediapipe as mp
 
-detector = dlib.get_frontal_face_detector()
-
-def analyze_face(image):
-    try:
-        analysis = DeepFace.analyze(image, actions=['emotion', 'age', 'race'], enforce_detection=False)
-        return analysis[0]
-    except:
-        return None
+mp_face_detection = mp.solutions.face_detection
 
 def detect_faces(image):
-    gray = cv2.cvtColor(np.array(image.convert("RGB")), cv2.COLOR_RGB2GRAY)
-    faces = detector(gray, 1)
-    return faces
-
-def remove_background(image, model_type):
-    session = new_session(model_type)
-    return remove(image, session=session)
+    """Обнаружение лиц на изображении."""
+    with mp_face_detection.FaceDetection(min_detection_confidence=0.5) as face_detection:
+        # Преобразуем PIL Image в numpy
+        img_np = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
+        # Выполняем детекцию лиц
+        results = face_detection.process(img_np)
+        # Если лица найдены, возвращаем их координаты
+        if results.detections:
+            return [d.location_data.relative_bounding_box for d in results.detections]
+        return []
