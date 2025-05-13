@@ -1,16 +1,13 @@
-import cv2
-import mediapipe as mp
+from PIL import Image
+from rembg import remove as remove_bg
 
-mp_face_detection = mp.solutions.face_detection
+def remove_background(image, model_type="U2Net"):
+    return remove_bg(image)
 
 def detect_faces(image):
-    """Обнаружение лиц на изображении."""
-    with mp_face_detection.FaceDetection(min_detection_confidence=0.5) as face_detection:
-        # Преобразуем PIL Image в numpy
-        img_np = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
-        # Выполняем детекцию лиц
-        results = face_detection.process(img_np)
-        # Если лица найдены, возвращаем их координаты
-        if results.detections:
-            return [d.location_data.relative_bounding_box for d in results.detections]
-        return []
+    # Заглушка для детекции лиц
+    return image
+
+def analyze_face(image):
+    # Заглушка для анализа лица
+    return image

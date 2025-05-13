@@ -1,20 +1,16 @@
-import os
+from pathlib import Path
 
 class Config:
     TEMPLATES_MM = {
-        "Паспорт РФ (35x45 мм)": (35, 45),
-        "Виза США (50x50 мм)": (50, 50),
-        "Водительские права (35x45 мм)": (35, 45),
+        "A4": (210, 297),
+        "Passport": (88, 125),
+        "Square": (100, 100)
     }
-    DPI_VALUES = [96, 150, 300, 600]
-    SUPPORTED_FORMATS = ["PNG", "JPEG", "PDF"]
-    AI_MODELS = {
-        "Базовая": "u2net",
-        "Высокая точность": "u2netp",
-        "Человеки": "u2net_human_seg"
-    }
-    PRESET_PATH = "assets/presets"
+    
+    DPI_VALUES = [150, 300, 600]
+    AI_MODELS = ["U2Net", "DeepLabV3"]
+    PRESET_PATH = Path(__file__).parent / "presets"
 
-    @staticmethod
-    def ensure_directories():
-        os.makedirs(Config.PRESET_PATH, exist_ok=True)
+    @classmethod
+    def ensure_directories(cls):
+        cls.PRESET_PATH.mkdir(parents=True, exist_ok=True)

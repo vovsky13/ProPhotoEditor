@@ -1,24 +1,23 @@
-from PIL import Image, ImageDraw, ImageEnhance
-import numpy as np
+from PIL import Image, ImageOps
+from utils import mm_to_pixels, apply_color_calibration
+from ai_models import remove_background
 
-def mm_to_pixels(mm, dpi):
-    return int((mm / 25.4) * dpi)
+def process_image(image, template_mm, dpi, model_type, brightness, contrast, saturation, gamma):
+    # Удаление фона
+    processed_img = remove_background(image, model_type)
+    
+    # Цветокоррекция
+    processed_img = apply_color_calibration(
+        processed_img, brightness, contrast, saturation, gamma
+    )
 
-def apply_color_calibration(img, brightness, contrast, saturation, gamma):
-    img = ImageEnhance.Brightness(img).enhance(brightness)
-    img = ImageEnhance.Contrast(img).enhance(contrast)
-    img = ImageEnhance.Color(img).enhance(saturation)
-    gamma_lut = [255 * (i / 255) ** (1.0 / gamma) for i in range(256)]
-    return img.point(gamma_lut)
-
-def create_grid(image, color, spacing=50):
-    draw = ImageDraw.Draw(image)
-    width, height = image.size
-
-    for x in range(0, width, spacing):
-        draw.line([(x, 0), (x, height)], fill=color, width=1)
-
-    for y in range(0, height, spacing):
-        draw.line([(0, y), (width, y)], fill=color, width=1)
-
-    return image
+    # Подгонка под шаблон
+    target_size = (
+        mm_to_pixels(template_mm[0], dpi),
+        mm_to_pixels(template_mm[1], dpi)
+    )
+    return ImageOps.fit(
+        processed_img.convert("RGB"),
+        target_size,
+        method=Image.Resampling.LANCZOS
+    )
