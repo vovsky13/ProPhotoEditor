@@ -1,5 +1,5 @@
 import cv2
-import mediapipe as mp
+import opencv-python-headless as mp
 
 mp_face_detection = mp.solutions.face_detection
 
