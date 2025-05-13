@@ -1,25 +1,12 @@
-from ai_models import detect_faces
+from PIL import ImageOps
+from utils import mm_to_pixels, apply_color_calibration
+from ai_models import remove_background
 
-def check_photo_requirements(img):
-    requirements = {
-        "faces_detected": False,
-        "face_centered": False
-    }
-    
-    # Проверка лиц
-    faces = detect_faces(img)
-    if faces:
-        requirements["faces_detected"] = True
-        # Проверим, центрировано ли лицо
-        width, height = img.size
-        center_x, center_y = width // 2, height // 2
+def process_image(image, template_mm, dpi, model_type, brightness, contrast, saturation, gamma):
+    processed_image = remove_background(image, model_type)
+    processed_image = apply_color_calibration(processed_img, brightness, contrast, saturation, gamma)
 
-        for face in faces:
-            # Получаем центр лица
-            face_center_x = int(face.xmin * width + (face.width * width) / 2)
-            face_center_y = int(face.ymin * height + (face.height * height) / 2)
-            
-            if abs(face_center_x - center_x) < 50 and abs(face_center_y - center_y) < 50:
-                requirements["face_centered"] = True
+    target_size = (mm_to_pixels(template_mm[0], dpi), mm_to_pixels(template_mm[1], dpi))
+    processed_image = ImageOps.fit(processed_img.convert("RGB"), target_size, method=Image.Resampling.LANCZOS)
 
-    return requirements
+    return processed_image
