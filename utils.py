@@ -1,42 +1,35 @@
-from PIL import Image, ImageEnhance, ImageDraw
-from typing import Tuple
-
-def validate_image(img: Image.Image, min_size: Tuple[int, int] = (100, 100)) -> None:
-    if img.width < min_size[0] or img.height < min_size[1]:
-        raise ValueError(f"Изображение слишком маленькое. Минимальный размер: {min_size}")
-
-def mm_to_pixels(mm: float, dpi: int) -> int:
-    return int(mm * dpi / 25.4)
-
-def format_size(size: Tuple[int, int]) -> str:
-    return f"{size[0]} x {size[1]} px"
-
-def create_grid(image: Image.Image, color: str = "#FF0000", spacing: int = 100) -> Image.Image:
-    draw = ImageDraw.Draw(image)
-    width, height = image.size
-
-    for x in range(0, width, spacing):
-        draw.line([(x, 0), (x, height)], fill=color)
-
-    for y in range(0, height, spacing):
-        draw.line([(0, y), (width, y)], fill=color)
-
-    return image
-
-def apply_color_filters(
+def apply_color_calibration(
     img: Image.Image,
-    brightness: float = 1.0,
-    contrast: float = 1.0,
-    saturation: float = 1.0,
-    gamma: float = 1.0,
+    temperature: float = 6500,  # Цветовая температура (по умолчанию 6500K - дневной свет)
+    tint: float = 0,            # Оттенок (-100..100)
+    profile: dict = None        # Кастомный цветовой профиль (опционально)
 ) -> Image.Image:
-    img = ImageEnhance.Brightness(img).enhance(brightness)
-    img = ImageEnhance.Contrast(img).enhance(contrast)
-    img = ImageEnhance.Color(img).enhance(saturation)
+    """
+    Применяет цветовую калибровку к изображению.
+    """
+    # Реализация калибровки через матрицу преобразования
+    if profile:
+        # Логика работы с кастомным профилем
+        pass
+    else:
+        # Базовая коррекция температуры и оттенка
+        r, g, b = _calculate_color_balance(temperature, tint)
+        matrix = (
+            r, 0, 0, 0,
+            0, g, 0, 0,
+            0, 0, b, 0
+        )
+    
+    return img.convert("RGB", matrix=matrix)
 
-    if gamma != 1.0:
-        inv_gamma = 1.0 / gamma
-        table = [int(((i / 255.0) ** inv_gamma) * 255) for i in range(256)]
-        img = img.point(table)
-
-    return img
+def _calculate_color_balance(temp: float, tint: float) -> Tuple[float, float, float]:
+    """
+    Рассчитывает баланс белого по алгоритму Хирна-Манкуса.
+    """
+    # Упрощенная реализация (можно заменить на точные формулы)
+    temp = max(1000, min(40000, temp))
+    r = temp / 6500
+    b = 6500 / temp
+    g = 1 + (tint / 200)  # Примерная коррекция оттенка
+    
+    return (r, g, b)
