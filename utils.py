@@ -1,63 +1,42 @@
-from PIL import Image, ImageEnhance, ImageOps, ImageDraw
-import numpy as np
+from PIL import Image, ImageEnhance, ImageDraw
+from typing import Tuple
+
+def validate_image(img: Image.Image, min_size: Tuple[int, int] = (100, 100)) -> None:
+    if img.width < min_size[0] or img.height < min_size[1]:
+        raise ValueError(f"Изображение слишком маленькое. Минимальный размер: {min_size}")
 
 def mm_to_pixels(mm: float, dpi: int) -> int:
     return int(mm * dpi / 25.4)
 
-def apply_color_calibration(img, brightness, contrast, saturation, gamma):
-    enhancer = ImageEnhance.Brightness(img)
-    img = enhancer.enhance(brightness)
+def format_size(size: Tuple[int, int]) -> str:
+    return f"{size[0]} x {size[1]} px"
 
-    enhancer = ImageEnhance.Contrast(img)
-    img = enhancer.enhance(contrast)
-
-    enhancer = ImageEnhance.Color(img)
-    img = enhancer.enhance(saturation)
-
-    img = img.point(lambda p: 255 * ((p / 255) ** (1 / gamma)))
-    return img
-
-def apply_filter(image, filter_type):
-    if filter_type == "Сепия":
-        sepia = np.array(image.convert("RGB"))
-        tr = [0.393, 0.769, 0.189]
-        tg = [0.349, 0.686, 0.168]
-        tb = [0.272, 0.534, 0.131]
-
-        r = sepia[:, :, 0] * tr[0] + sepia[:, :, 1] * tr[1] + sepia[:, :, 2] * tr[2]
-        g = sepia[:, :, 0] * tg[0] + sepia[:, :, 1] * tg[1] + sepia[:, :, 2] * tg[2]
-        b = sepia[:, :, 0] * tb[0] + sepia[:, :, 1] * tb[1] + sepia[:, :, 2] * tb[2]
-
-        sepia = np.stack([r, g, b], axis=2)
-        sepia = np.clip(sepia, 0, 255).astype(np.uint8)
-        return Image.fromarray(sepia)
-
-    elif filter_type == "Чёрно-белый":
-        return image.convert("L").convert("RGB")
-
-    elif filter_type == "Инверсия":
-        return ImageOps.invert(image.convert("RGB"))
-
-    return image
-
-def create_grid(image, color="#FF0000"):
+def create_grid(image: Image.Image, color: str = "#FF0000", spacing: int = 100) -> Image.Image:
     draw = ImageDraw.Draw(image)
     width, height = image.size
 
-    for x in range(0, width, 100):
+    for x in range(0, width, spacing):
         draw.line([(x, 0), (x, height)], fill=color)
 
-    for y in range(0, height, 100):
+    for y in range(0, height, spacing):
         draw.line([(0, y), (width, y)], fill=color)
 
     return image
 
-def validate_image(image: Image.Image) -> bool:
-    return isinstance(image, Image.Image) and image.mode in ["RGB", "RGBA", "L"]
+def apply_color_filters(
+    img: Image.Image,
+    brightness: float = 1.0,
+    contrast: float = 1.0,
+    saturation: float = 1.0,
+    gamma: float = 1.0,
+) -> Image.Image:
+    img = ImageEnhance.Brightness(img).enhance(brightness)
+    img = ImageEnhance.Contrast(img).enhance(contrast)
+    img = ImageEnhance.Color(img).enhance(saturation)
 
-def format_size(num_bytes: int) -> str:
-    for unit in ["B", "KB", "MB", "GB"]:
-        if num_bytes < 1024:
-            return f"{num_bytes:.1f} {unit}"
-        num_bytes /= 1024
-    return f"{num_bytes:.1f} TB"
+    if gamma != 1.0:
+        inv_gamma = 1.0 / gamma
+        table = [int(((i / 255.0) ** inv_gamma) * 255) for i in range(256)]
+        img = img.point(table)
+
+    return img
