@@ -1,256 +1,190 @@
-"""
-Professional Document Photo Editor Application
-
-Features:
-- Batch image processing with AI-powered background removal
-- Customizable document templates and export settings
-- Preset management system
-- Real-time adjustments with preview
-"""
-
+def main():
+import logging
 import streamlit as st
 from PIL import Image
-from typing import Dict, List, Optional, Tuple
-from pathlib import Path
-import logging
-import time
-
-from config import Config
-from utils import create_grid, validate_image, format_size
-from processing import process_image
-from presets import save_preset, load_preset, get_available_presets
-from exceptions import InvalidImageError, ProcessingError
-
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[logging.FileHandler(Config.LOG_FILE), logging.StreamHandler()]
+from io import BytesIO
+from utils import (
+    validate_image,
+    mm_to_pixels,
+    format_size,
+    create_grid,
+    apply_color_filters,
+    apply_color_calibration
 )
-logger = logging.getLogger(__name__)
+from exceptions import InvalidImageError, ProcessingError
+from config import Config
 
-Config.ensure_directories()
-
-def handle_image_processing(uploaded_file, settings: Dict) -> Optional[Image.Image]:
-    """Process and display image with given settings"""
-    try:
-        with st.spinner(f"Обработка {uploaded_file.name}..."):
-            start_time = time.time()
-            
-            # Validate and load image
-            original_image = Image.open(uploaded_file).convert("RGB")
-            validate_image(original_image)
-            
-            # Processing
-            processed_img = process_image(
-                image=original_image,
-                template_mm=Config.TEMPLATES_MM[settings["template"]],
-                dpi=settings["dpi"],
-                model_name=settings["model"],
-                bg_color=settings["background_color"],
-                brightness=settings["brightness"],
-                contrast=settings["contrast"],
-                saturation=settings["saturation"],
-                gamma=settings["gamma"]
-            )
-            
-            # Log performance
-            processing_time = time.time() - start_time
-            logger.info(f"Processed {uploaded_file.name} ({original_image.size}) in {processing_time:.2f}s")
-            
-            return processed_img
-
-    except InvalidImageError as e:
-        logger.error(f"Invalid image error: {str(e)}")
-        st.error(f"Ошибка валидации изображения: {str(e)}")
-    except ProcessingError as e:
-        logger.error(f"Processing error: {str(e)}")
-        st.error(f"Ошибка обработки изображения: {str(e)}")
-    except Exception as e:
-        logger.error(f"Unexpected error: {str(e)}", exc_info=True)
-        st.error("Непредвиденная ошибка при обработке.")
-    return None
-
-def create_sidebar() -> Dict:
-    """Create sidebar controls and return settings dictionary"""
-    st.sidebar.header("⚙️ Настройки обработки")
-    
-    # Preset management
-    presets = get_available_presets()
-    selected_preset = st.sidebar.selectbox("Загрузить пресет", ["Custom"] + presets)
-    
-    # Initialize settings with defaults
-    settings = {
-        "template": Config.DEFAULT_TEMPLATE,
-        "dpi": Config.DEFAULT_DPI,
-        "model": Config.DEFAULT_MODEL,
-        "background_color": Config.DEFAULT_BG_COLOR,
-        "brightness": Config.DEFAULT_BRIGHTNESS,
-        "contrast": Config.DEFAULT_CONTRAST,
-        "saturation": Config.DEFAULT_SATURATION,
-        "gamma": Config.DEFAULT_GAMMA,
-    }
-
-    # Load preset
-    if selected_preset != "Custom":
-        preset_settings = load_preset(selected_preset)
-        if preset_settings:
-            settings.update(preset_settings)
-            st.sidebar.success(f"Пресет '{selected_preset}' загружен")
-        else:
-            st.sidebar.error("Ошибка загрузки пресета")
-
-    # Template settings
-    settings["template"] = st.sidebar.selectbox(
-        "Формат документа",
-        options=list(Config.TEMPLATES_MM.keys()),
-        index=list(Config.TEMPLATES_MM.keys()).index(settings["template"])
-    )
-
-    # Quality settings
-    col1, col2 = st.sidebar.columns(2)
-    with col1:
-        settings["dpi"] = st.selectbox(
-            "Разрешение (DPI)",
-            options=Config.DPI_VALUES,
-            index=Config.DPI_VALUES.index(settings["dpi"])
-        )
-    with col2:
-        settings["model"] = st.selectbox(
-            "AI Модель",
-            options=Config.AI_MODELS,
-            index=Config.AI_MODELS.index(settings["model"])
-        )
-
-    # Color adjustments
-    st.sidebar.subheader("🎨 Коррекция цвета")
-    settings["background_color"] = st.sidebar.color_picker(
-        "Цвет фона",
-        value=settings["background_color"]
-    )
-    
-    settings["brightness"] = st.sidebar.slider(
-        "Яркость",
-        min_value=0.5, max_value=2.0,
-        value=settings["brightness"], step=0.1
-    )
-    settings["contrast"] = st.sidebar.slider(
-        "Контраст",
-        min_value=0.5, max_value=2.0,
-        value=settings["contrast"], step=0.1
-    )
-    settings["saturation"] = st.sidebar.slider(
-        "Насыщенность",
-        min_value=0.0, max_value=2.0,
-        value=settings["saturation"], step=0.1
-    )
-    settings["gamma"] = st.sidebar.slider(
-        "Гамма-коррекция",
-        min_value=0.5, max_value=2.0,
-        value=settings["gamma"], step=0.1
-    )
-
-    # Preset saving
-    st.sidebar.subheader("💾 Сохранение пресета")
-    preset_name = st.sidebar.text_input("Название пресета")
-    if st.sidebar.button("Сохранить текущие настройки"):
-        if preset_name and preset_name != "Custom":
-            try:
-                save_preset(preset_name, settings)
-                st.sidebar.success(f"Пресет '{preset_name}' сохранён")
-            except Exception as e:
-                st.sidebar.error(f"Ошибка сохранения: {str(e)}")
-        else:
-            st.sidebar.error("Введите корректное имя пресета")
-
-    return settings
+# Настройка логирования
+logging.basicConfig(
+    filename=Config.LOG_FILE,
+    level=logging.DEBUG if Config.DEBUG else logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s"
+)
 
 def main():
-    """Основная функция приложения"""
-    st.set_page_config(
-        page_title="📸 Pro Редактор Фото на Документы",
-        page_icon="📷",
-        layout="wide",
-        initial_sidebar_state="expanded"
-    )
+    st.set_page_config(page_title="Pro Photo Editor", layout="wide")
+    st.title("🎨 Pro Photo Editor")
     
-    # Заголовок приложения
-    st.title("📸 Pro Редактор Фото на Документы")
-    st.markdown("""
-        **Профессиональная обработка фотографий для документов**  
-        Загрузите фото и настройте параметры обработки
-    """)
-    
-    # Загрузка файлов
-    uploaded_files = st.file_uploader(
-        "ПЕРЕТАЩИТЕ ФОТО СЮДА",
-        type=["jpg", "jpeg", "png"],
-        accept_multiple_files=True,
-        help="Максимальное количество файлов: 10"
-    )
-    
-    # Лимит файлов
-    if uploaded_files and len(uploaded_files) > 10:
-        st.error("Максимальное количество файлов: 10")
-        uploaded_files = uploaded_files[:10]
+    # Инициализация сессионных переменных
+    if "image" not in st.session_state:
+        st.session_state.image = None
+    if "processed_image" not in st.session_state:
+        st.session_state.processed_image = None
 
-    # Получение настроек
-    processing_settings = create_sidebar()
-    
-    # Обработка
-    if uploaded_files:
-        if st.button("🚀 Начать обработку", type="primary"):
-            st.subheader(f"🖼 Обработка {len(uploaded_files)} изображений")
-            progress_bar = st.progress(0)
-            success_count = 0
-            
-            for i, uploaded_file in enumerate(uploaded_files):
-                try:
-                    with st.container():
-                        col1, col2 = st.columns(2)
-                        
-                        with col1:
-                            original_image = Image.open(uploaded_file).convert("RGB")
-                            st.image(original_image, 
-                                   caption=f"Исходное: {uploaded_file.name}",
-                                   use_column_width=True)
-                            
-                            if st.checkbox("Показать сетку", key=f"grid_{i}"):
-                                grid_image = create_grid(original_image.copy())
-                                st.image(grid_image, 
-                                       caption="Сетка выравнивания",
-                                       use_column_width=True)
+    # Сайдбар для загрузки и базовых настроек
+    with st.sidebar:
+        st.header("⚙️ Настройки")
+        uploaded_file = st.file_uploader("Загрузите изображение", type=["jpg", "png", "jpeg"])
+        
+        if uploaded_file:
+            try:
+                image = Image.open(uploaded_file)
+                validate_image(image)
+                st.session_state.image = image
+                st.success("Изображение загружено!")
+            except InvalidImageError as e:
+                st.error(str(e))
+            except Exception as e:
+                logging.error(f"Ошибка загрузки: {str(e)}")
+                st.error("Неподдерживаемый формат файла")
 
-                        with col2:
-                            processed_img = handle_image_processing(uploaded_file, processing_settings)
-                            if processed_img:
-                                st.image(processed_img, 
-                                       caption="Результат обработки",
-                                       use_column_width=True)
-                                
-                                # Кнопка скачивания
-                                img_bytes = processed_img.tobytes()
-                                st.download_button(
-                                    label="⬇️ Скачать результат",
-                                    data=img_bytes,
-                                    file_name=f"processed_{uploaded_file.name}",
-                                    mime="image/jpeg",
-                                    key=f"download_{i}"
-                                )
-                                success_count += 1
+        st.divider()
+        dpi = st.slider("DPI для печати", 72, 600, 300)
+        show_grid = st.checkbox("Показать сетку")
+        grid_spacing = st.slider("Шаг сетки (мм)", 1, 100, 10) if show_grid else 10
 
-                    progress_bar.progress((i + 1) / len(uploaded_files))
+    # Основные вкладки
+    tab1, tab2, tab3 = st.tabs(["📷 Коррекция", "🎚️ Фильтры", "💾 Экспорт"])
+
+    with tab1:
+        if st.session_state.image:
+            col1, col2 = st.columns(2)
+            with col1:
+                st.subheader("Оригинал")
+                st.image(st.session_state.image, use_column_width=True)
+
+            with col2:
+                st.subheader("Калибровка цвета")
+                temperature = st.slider("Температура (K)", 1000, 40000, 6500)
+                tint = st.slider("Оттенок", -100, 100, 0)
                 
-                except Exception as e:
-                    logger.error(f"Ошибка обработки {uploaded_file.name}: {str(e)}")
-                    st.error(f"Ошибка обработки {uploaded_file.name}: {str(e)}")
+                if st.button("Применить калибровку"):
+                    try:
+                        processed = apply_color_calibration(
+                            st.session_state.image,
+                            temperature=temperature,
+                            tint=tint
+                        )
+                        if show_grid:
+                            processed = create_grid(processed, spacing=mm_to_pixels(grid_spacing, dpi))
+                        st.session_state.processed_image = processed
+                    except ProcessingError as e:
+                        st.error(str(e))
+                        logging.error(f"Ошибка калибровки: {str(e)}")
 
-            # Итоговое сообщение
-            if success_count > 0:
-                st.success(f"✅ Успешно обработано {success_count}/{len(uploaded_files)} изображений")
-                st.balloons()
-            else:
-                st.error("⚠️ Обработка не удалась для всех файлов")
+                if st.session_state.processed_image:
+                    st.subheader("Результат")
+                    st.image(st.session_state.processed_image, use_column_width=True)
+
+    with tab2:
+        if st.session_state.image:
+            brightness = st.slider("Яркость", 0.0, 2.0, 1.0, 0.1)
+            contrast = st.slider("Контраст", 0.0, 2.0, 1.0, 0.1)
+            saturation = st.slider("Насыщенность", 0.0, 2.0, 1.0, 0.1)
+            gamma = st.slider("Гамма", 0.1, 3.0, 1.0, 0.1)
+
+            if st.button("Применить фильтры"):
+                try:
+                    processed = apply_color_filters(
+                        st.session_state.image,
+                        brightness=brightness,
+                        contrast=contrast,
+                        saturation=saturation,
+                        gamma=gamma
+                    )
+                    if show_grid:
+                        processed = create_grid(processed, spacing=mm_to_pixels(grid_spacing, dpi))
+                    st.session_state.processed_image = processed
+                except ProcessingError as e:
+                    st.error(str(e))
+                    logging.error(f"Ошибка фильтров: {str(e)}")
+
+    with tab3:
+        if st.session_state.processed_image:
+            # Информация о размере
+            size_info = format_size(st.session_state.processed_image.size)
+            st.metric("Размер изображения", size_info)
+            
+            # Пресеты
+            preset_name = st.text_input("Название пресета")
+            if st.button("Сохранить пресет"):
+                save_preset(preset_name, {
+                    'temperature': temperature,
+                    'tint': tint,
+                    'brightness': brightness,
+                    'contrast': contrast
+                })
+                st.success("Пресет сохранен!")
+
+            # Экспорт
+            buf = BytesIO()
+            st.session_state.processed_image.save(buf, format="PNG")
+            byte_im = buf.getvalue()
+            
+            st.download_button(
+                label="Скачать изображение",
+                data=byte_im,
+                file_name="processed_image.png",
+                mime="image/png"
+            )
 
 if __name__ == "__main__":
     main()
+ tab4, tab5 = st.tabs(["🌀 Фон", "🎭 Пресет-фильтры"])
+
+    with tab4:
+        if st.session_state.image:
+            col1, col2, col3 = st.columns([1,1,1])
+            
+            with col1:
+                st.subheader("Оригинал")
+                st.image(st.session_state.image, use_column_width=True)
+                
+            with col2:
+                if st.button("Удалить фон"):
+                    try:
+                        bg_removed = remove_background(st.session_state.image)
+                        st.session_state.processed_image = bg_removed
+                    except Exception as e:
+                        st.error(f"Ошибка удаления фона: {str(e)}")
+                        
+                new_bg = st.file_uploader("Загрузите новый фон", type=["jpg", "png"])
+                border_size = st.slider("Сглаживание границ", 1, 20, 5)
+                blend_level = st.slider("Смешивание с фоном", 0.0, 1.0, 1.0)
+                
+            with col3:
+                if st.session_state.processed_image and new_bg:
+                    background_img = Image.open(new_bg)
+                    replaced = replace_background(
+                        st.session_state.processed_image,
+                        background_img,
+                        border_pixels=border_size,
+                        blur_radius=int(blend_level*10)
+                    st.image(replaced, use_column_width=True)
+
+    with tab5:
+        if st.session_state.image:
+            preset = st.selectbox("Выберите фильтр", 
+                ['clarendon', 'gingham', 'moon', 'lark', 'juno'])
+            intensity = st.slider("Интенсивность", 0.0, 1.0, 0.8)
+            
+            preview = apply_advanced_filters(
+                st.session_state.image, 
+                filter_type=preset,
+                intensity=intensity)
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                st.image(st.session_state.image, caption="Оригинал")
+            with col2:
+                st.image(preview, caption=f"Фильтр: {preset}")

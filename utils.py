@@ -1,67 +1,54 @@
-from PIL import Image, ImageEnhance, ImageDraw
-from typing import Tuple
+from rembg import remove
+import cv2
+import numpy as np
+from skimage import exposure
 
-def validate_image(img: Image.Image, min_size: Tuple[int, int] = (100, 100)) -> None:
-    if img.width < min_size[0] or img.height < min_size[1]:
-        raise ValueError(f"Изображение слишком маленькое. Минимальный размер: {min_size}")
+def remove_background(img: Image.Image) -> Image.Image:
+    """Удаление фона с помощью нейросети U-2-Net"""
+    return remove(img)
 
-def mm_to_pixels(mm: float, dpi: int) -> int:
-    return int(mm * dpi / 25.4)
-
-def format_size(size: Tuple[int, int]) -> str:
-    return f"{size[0]} x {size[1]} px"
-
-def create_grid(image: Image.Image, color: str = "#FF0000", spacing: int = 100) -> Image.Image:
-    draw = ImageDraw.Draw(image)
-    width, height = image.size
-
-    for x in range(0, width, spacing):
-        draw.line([(x, 0), (x, height)], fill=color)
-
-    for y in range(0, height, spacing):
-        draw.line([(0, y), (width, y)], fill=color)
-
-    return image
-
-def apply_color_filters(
-    img: Image.Image,
-    brightness: float = 1.0,
-    contrast: float = 1.0,
-    saturation: float = 1.0,
-    gamma: float = 1.0,
+def replace_background(
+    img: Image.Image, 
+    background: Image.Image, 
+    border_pixels: int = 5,
+    blur_radius: int = 3
 ) -> Image.Image:
-    img = ImageEnhance.Brightness(img).enhance(brightness)
-    img = ImageEnhance.Contrast(img).enhance(contrast)
-    img = ImageEnhance.Color(img).enhance(saturation)
-
-    if gamma != 1.0:
-        inv_gamma = 1.0 / gamma
-        table = [int(((i / 255.0) ** inv_gamma) * 255) for i in range(256)]
-        img = img.point(table)
-
-    return img
-
-def _calculate_color_balance(temp: float, tint: float) -> Tuple[float, float, float]:
-    temp = max(1000, min(40000, temp))
-    r = temp / 6500
-    b = 6500 / temp
-    g = 1 + (tint / 200)
-    return (r, g, b)
-
-def apply_color_calibration(
-    img: Image.Image,
-    temperature: float = 6500,
-    tint: float = 0,
-    profile: dict = None
-) -> Image.Image:
-    if profile:
-        pass
-    else:
-        r, g, b = _calculate_color_balance(temperature, tint)
-        matrix = (
-            r, 0, 0, 0,
-            0, g, 0, 0,
-            0, 0, b, 0
-        )
+    """
+    Замена фона с обработкой границ
+    """
+    # Создаем маску без фона
+    mask = remove(img.convert('RGB')).convert('L')
     
-    return img.convert("RGB", matrix=matrix)
+    # Обработка границ
+    mask_np = np.array(mask)
+    mask_np = cv2.dilate(mask_np, np.ones((border_pixels, border_pixels), np.uint8))
+    mask_np = cv2.GaussianBlur(mask_np, (blur_radius*2+1, blur_radius*2+1), 0)
+    
+    # Наложение на новый фон
+    background = background.resize(img.size)
+    composite = Image.composite(img, background, Image.fromarray(mask_np))
+    
+    return composite
+
+def apply_advanced_filters(
+    img: Image.Image,
+    filter_type: str = 'clarendon',
+    intensity: float = 1.0
+) -> Image.Image:
+    """
+    Применение пресет-фильтров в стиле Instagram
+    Доступные фильтры: clarendon, gingham, moon, lark, juno
+    """
+    filters = {
+        'clarendon': lambda x: exposure.adjust_gamma(x, 0.9),
+        'gingham': lambda x: cv2.applyColorMap(x, cv2.COLORMAP_PINK),
+        'moon': lambda x: cv2.cvtColor(x, cv2.COLOR_RGB2GRAY),
+        'lark': lambda x: exposure.adjust_sigmoid(x, gain=5),
+        'juno': lambda x: cv2.addWeighted(x, 0.8, np.full(x.shape, [50, 30, 180], dtype=np.uint8), 0.2, 0)
+    }
+    
+    img_np = np.array(img.convert('RGB'))
+    filtered = filters[filter_type](img_np)
+    blended = cv2.addWeighted(img_np, 1-intensity, filtered, intensity, 0)
+    
+    return Image.fromarray(blended)
